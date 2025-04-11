@@ -1,144 +1,188 @@
-workflows:
-  react-native-android:
-    name: React Native Android
-    max_build_duration: 120
-    instance_type: mac_mini_m2
-    environment:
-      vars:
-        PACKAGE_NAME: "com.ankitproject2.app"
-      android_signing:
-        - AnkitSir
-    scripts:
-      - name: Install npm dependencies
-        script: |
-          npm install expo-cli@6.3.0
-          npm install
-      - name: Install sharp-cli globally
-        script: |
-          npm install -g sharp-cli
+# workflows:
+#   react-native-android:
+#     name: React Native Android
+#     max_build_duration: 120
+#     instance_type: mac_mini_m2
+#     environment:
+#       vars:
+#         PACKAGE_NAME: "com.ankitproject2.app"
+#       android_signing:
+#         - AnkitSir
+#     scripts:
+#       - name: Install npm dependencies
+#         script: |
+#           npm install expo-cli@6.3.0
+#           npm install
+#       - name: Install sharp-cli globally
+#         script: |
+#           npm install -g sharp-cli
 
-      - name: Install compatible expo-system-ui version
-        script: |
-          npm install expo-system-ui@3.0.0
-      - name: Clear Metro Bundler Cache
-        script: |
-          npx react-native-community/cli start --reset-cache --no-interactive || true
-          # Alternative approach
-          rm -rf $HOME/.npm/_cacache
-          rm -rf $TMPDIR/metro-*
-          rm -rf $TMPDIR/haste-map-*
-      - name: Validate Metro Configuration
-        script: |
-          if [ ! -f metro.config.js ]; then
-            echo "module.exports = require('@expo/metro-config').getDefaultConfig(__dirname);" > metro.config.js
-          fi
-      - name: Patch Expo Gradle Files
-        script: |
-          # Fix for the ExpoModulesCorePlugin.gradle
-          EXPO_CORE_PLUGIN_FILE="$CM_BUILD_DIR/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle"
+#       - name: Install compatible expo-system-ui version
+#         script: |
+#           npm install expo-system-ui@3.0.0
+#       - name: Clear Metro Bundler Cache
+#         script: |
+#           npx react-native-community/cli start --reset-cache --no-interactive || true
+#           # Alternative approach
+#           rm -rf $HOME/.npm/_cacache
+#           rm -rf $TMPDIR/metro-*
+#           rm -rf $TMPDIR/haste-map-*
+#       - name: Validate Metro Configuration
+#         script: |
+#           if [ ! -f metro.config.js ]; then
+#             echo "module.exports = require('@expo/metro-config').getDefaultConfig(__dirname);" > metro.config.js
+#           fi
+#       - name: Patch Expo Gradle Files
+#         script: |
+#           # Fix for the ExpoModulesCorePlugin.gradle
+#           EXPO_CORE_PLUGIN_FILE="$CM_BUILD_DIR/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle"
           
-          if [ -f "$EXPO_CORE_PLUGIN_FILE" ]; then
-            # Create backup
-            cp "$EXPO_CORE_PLUGIN_FILE" "${EXPO_CORE_PLUGIN_FILE}.backup"
+#           if [ -f "$EXPO_CORE_PLUGIN_FILE" ]; then
+#             # Create backup
+#             cp "$EXPO_CORE_PLUGIN_FILE" "${EXPO_CORE_PLUGIN_FILE}.backup"
             
-            # Replace the problematic line with a safer approach that checks if components has a 'release' component
-            sed -i '' 's/components.release/components.findByName("release") ?: components.first()/g' "$EXPO_CORE_PLUGIN_FILE"
+#             # Replace the problematic line with a safer approach that checks if components has a 'release' component
+#             sed -i '' 's/components.release/components.findByName("release") ?: components.first()/g' "$EXPO_CORE_PLUGIN_FILE"
             
-            echo "Patched ExpoModulesCorePlugin.gradle"
-          else
-            echo "Warning: Could not find ExpoModulesCorePlugin.gradle file"
-          fi
+#             echo "Patched ExpoModulesCorePlugin.gradle"
+#           else
+#             echo "Warning: Could not find ExpoModulesCorePlugin.gradle file"
+#           fi
           
-          # Also check and patch other gradle files
-          for FILE in $(find "$CM_BUILD_DIR/node_modules" -name "*.gradle" -type f -exec grep -l "components.release" {} \;); do
-            cp "$FILE" "${FILE}.backup"
-            sed -i '' 's/components.release/components.findByName("release") ?: components.first()/g' "$FILE"
-            echo "Patched $FILE"
-          done
+#           # Also check and patch other gradle files
+#           for FILE in $(find "$CM_BUILD_DIR/node_modules" -name "*.gradle" -type f -exec grep -l "components.release" {} \;); do
+#             cp "$FILE" "${FILE}.backup"
+#             sed -i '' 's/components.release/components.findByName("release") ?: components.first()/g' "$FILE"
+#             echo "Patched $FILE"
+#           done
           
-          # Create a helper file to apply compileSdkVersion to all modules
-          echo '
-          // build.gradle root file patch
-          allprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty("android")) {
-                      android {
-                          if (!project.android.hasProperty("compileSdkVersion")) {
-                              compileSdkVersion 33
-                          }
-                          if (!project.android.hasProperty("targetSdkVersion")) {
-                              defaultConfig {
-                                  targetSdkVersion 33
-                              }
-                          }
-                      }
-                  }
-              }
-          }
-          ' > "$CM_BUILD_DIR/sdk_version_patch.gradle"
-      - name: Run Expo Prebuild
-        script: |
-          npx expo prebuild
-      - name: Set up app/build.gradle
-        script: | 
-          mv ./build.gradle android/app
-      - name: Set Android SDK location
-        script: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-      - name: Apply Gradle Patches to Generated Files
-        script: |
-          # Apply the compileSdkVersion patch to the main build.gradle
-          MAIN_GRADLE_FILE="$CM_BUILD_DIR/android/build.gradle"
+#           # Create a helper file to apply compileSdkVersion to all modules
+#           echo '
+#           // build.gradle root file patch
+#           allprojects {
+#               afterEvaluate { project ->
+#                   if (project.hasProperty("android")) {
+#                       android {
+#                           if (!project.android.hasProperty("compileSdkVersion")) {
+#                               compileSdkVersion 33
+#                           }
+#                           if (!project.android.hasProperty("targetSdkVersion")) {
+#                               defaultConfig {
+#                                   targetSdkVersion 33
+#                               }
+#                           }
+#                       }
+#                   }
+#               }
+#           }
+#           ' > "$CM_BUILD_DIR/sdk_version_patch.gradle"
+#       - name: Run Expo Prebuild
+#         script: |
+#           npx expo prebuild
+#       - name: Set up app/build.gradle
+#         script: | 
+#           mv ./build.gradle android/app
+#       - name: Set Android SDK location
+#         script: |
+#           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+#       - name: Apply Gradle Patches to Generated Files
+#         script: |
+#           # Apply the compileSdkVersion patch to the main build.gradle
+#           MAIN_GRADLE_FILE="$CM_BUILD_DIR/android/build.gradle"
           
-          if [ -f "$MAIN_GRADLE_FILE" ]; then
-            echo "apply from: '$CM_BUILD_DIR/sdk_version_patch.gradle'" >> "$MAIN_GRADLE_FILE"
-            echo "Added sdk_version_patch.gradle to main build.gradle"
-          fi
+#           if [ -f "$MAIN_GRADLE_FILE" ]; then
+#             echo "apply from: '$CM_BUILD_DIR/sdk_version_patch.gradle'" >> "$MAIN_GRADLE_FILE"
+#             echo "Added sdk_version_patch.gradle to main build.gradle"
+#           fi
           
-          # Make sure each module has compileSdkVersion
-          for GRADLE_FILE in $(find "$CM_BUILD_DIR/android" -name "build.gradle"); do
-            if grep -q "android {" "$GRADLE_FILE" && ! grep -q "compileSdkVersion" "$GRADLE_FILE"; then
-              sed -i '' '/android {/a\\
-              compileSdkVersion 33' "$GRADLE_FILE"
-              echo "Added compileSdkVersion to $GRADLE_FILE"
-            fi
-          done
+#           # Make sure each module has compileSdkVersion
+#           for GRADLE_FILE in $(find "$CM_BUILD_DIR/android" -name "build.gradle"); do
+#             if grep -q "android {" "$GRADLE_FILE" && ! grep -q "compileSdkVersion" "$GRADLE_FILE"; then
+#               sed -i '' '/android {/a\\
+#               compileSdkVersion 33' "$GRADLE_FILE"
+#               echo "Added compileSdkVersion to $GRADLE_FILE"
+#             fi
+#           done
           
-          # Downgrade Gradle if necessary
-          sed -i '' 's/gradle-[0-9]\.[0-9]\.[0-9]/gradle-7.3.3/g' "$CM_BUILD_DIR/android/gradle/wrapper/gradle-wrapper.properties"
+#           # Downgrade Gradle if necessary
+#           sed -i '' 's/gradle-[0-9]\.[0-9]\.[0-9]/gradle-7.3.3/g' "$CM_BUILD_DIR/android/gradle/wrapper/gradle-wrapper.properties"
           
-          # Check if pluginManagement already exists in settings.gradle before adding it
-          SETTINGS_GRADLE="$CM_BUILD_DIR/android/settings.gradle"
-          if [ -f "$SETTINGS_GRADLE" ] && ! grep -q "pluginManagement" "$SETTINGS_GRADLE"; then
-            echo "
-            pluginManagement {
-                repositories {
-                    google()
-                    mavenCentral()
-                    gradlePluginPortal()
-                }
-            }
-            " > "$SETTINGS_GRADLE.new"
-            cat "$SETTINGS_GRADLE" >> "$SETTINGS_GRADLE.new"
-            mv "$SETTINGS_GRADLE.new" "$SETTINGS_GRADLE"
-            echo "Added pluginManagement block to settings.gradle"
-          else
-            echo "pluginManagement block already exists in settings.gradle, skipping addition"
-          fi
-      - name: Build Android release
-        script: |
-          cd android
-          # Clean first
-          ./gradlew clean
-          # Then build with detailed logs
-          ./gradlew assembleRelease --stacktrace
-    artifacts:
-      - android/app/build/outputs/**/*.apk
-    publishing:
-      email:
-        recipients:
-          - user_1@example.com
-          - user_2@example.com
-        notify:
-          success: true
-          failure: false
+#           # Check if pluginManagement already exists in settings.gradle before adding it
+#           SETTINGS_GRADLE="$CM_BUILD_DIR/android/settings.gradle"
+#           if [ -f "$SETTINGS_GRADLE" ] && ! grep -q "pluginManagement" "$SETTINGS_GRADLE"; then
+#             echo "
+#             pluginManagement {
+#                 repositories {
+#                     google()
+#                     mavenCentral()
+#                     gradlePluginPortal()
+#                 }
+#             }
+#             " > "$SETTINGS_GRADLE.new"
+#             cat "$SETTINGS_GRADLE" >> "$SETTINGS_GRADLE.new"
+#             mv "$SETTINGS_GRADLE.new" "$SETTINGS_GRADLE"
+#             echo "Added pluginManagement block to settings.gradle"
+#           else
+#             echo "pluginManagement block already exists in settings.gradle, skipping addition"
+#           fi
+#       - name: Build Android release
+#         script: |
+#           cd android
+#           # Clean first
+#           ./gradlew clean
+#           # Then build with detailed logs
+#           ./gradlew assembleRelease --stacktrace
+#     artifacts:
+#       - android/app/build/outputs/**/*.apk
+#     publishing:
+#       email:
+#         recipients:
+#           - user_1@example.com
+#           - user_2@example.com
+#         notify:
+#           success: true
+#           failure: false
+
+workflows:
+    react-native-android:
+        name: React Native Android
+        max_build_duration: 120
+        instance_type: mac_mini_m2
+        environment:
+          android_signing:
+            - keystore_reference
+          groups:
+            - google_play # <-- (Includes GCLOUD_SERVICE_ACCOUNT_CREDENTIALS <-- Put your google-services.json)
+          vars:
+            PACKAGE_NAME: "io.codemagic.sample.reactnative" # <-- Put your package name here e.g. com.domain.myapp
+          node: v19.7.0
+        scripts:
+            - name: Install npm dependencies
+              script: |
+                npm install
+            - name: Set Android SDK location
+              script: |
+                echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"            
+            - name: Build Android release
+              script: |
+                LATEST_GOOGLE_PLAY_BUILD_NUMBER=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME")
+                if [ -z LATEST_BUILD_NUMBER ]; then
+                  # fallback in case no build number was found from google play. Alternatively, you can `exit 1` to fail the build
+                  UPDATED_BUILD_NUMBER=$BUILD_NUMBER
+                else
+                  UPDATED_BUILD_NUMBER=$(($LATEST_GOOGLE_PLAY_BUILD_NUMBER + 1))
+                fi
+                cd android
+                ./gradlew bundleRelease \
+                  -PversionCode=$UPDATED_BUILD_NUMBER \
+                  -PversionName=1.0.$UPDATED_BUILD_NUMBER
+        artifacts:
+            - android/app/build/outputs/**/*.aab
+        publishing:
+          email:
+            recipients:
+              - user_1@example.com
+              - user_2@example.com
+            notify:
+              success: true     # To not receive a notification when a build succeeds
+              failure: false    # To not receive a notification when a build fails
