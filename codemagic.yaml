@@ -16,13 +16,7 @@ workflows:
       - name: Install sharp-cli globally
         script: |
           npm install -g sharp-cli
-      - name: Install Expo CLI and eject
-        script: | 
-          npm install -g expo-cli
-          expo eject
-      - name: Set up app/build.gradle
-        script: | 
-          mv ./build.gradle android/app
+
       - name: Install compatible expo-system-ui version
         script: |
           npm install expo-system-ui@3.0.0
@@ -88,6 +82,9 @@ workflows:
       - name: Run Expo Prebuild
         script: |
           npx expo prebuild
+      - name: Set up app/build.gradle
+        script: | 
+          mv ./build.gradle android/app
       - name: Set Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
