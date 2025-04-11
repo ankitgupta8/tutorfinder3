@@ -32,44 +32,52 @@ workflows:
       - name: Validate Expo project setup
         script: |
           npx expo doctor || true
+      - name: Patch Expo Gradle Files
+        script: |
+          # Fix the "Could not get unknown property 'release'" error
+          EXPO_CORE_PLUGIN_FILE="$CM_BUILD_DIR/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle"
+          
+          if [ -f "$EXPO_CORE_PLUGIN_FILE" ]; then
+            # Create backup
+            cp "$EXPO_CORE_PLUGIN_FILE" "${EXPO_CORE_PLUGIN_FILE}.backup"
+            
+            # Patch the file to fix the 'release' property issue
+            sed -i '' 's/components.release/components.findByName("release") ?: components.getByName("default")/g' "$EXPO_CORE_PLUGIN_FILE"
+            
+            echo "Patched ExpoModulesCorePlugin.gradle to fix release property issue"
+          else
+            echo "Warning: Could not find ExpoModulesCorePlugin.gradle file"
+          fi
+          
+          # Also patch other Expo gradle files that might have the same issue
+          find "$CM_BUILD_DIR/node_modules" -name "*.gradle" -type f -exec grep -l "components.release" {} \; | while read -r file; do
+            cp "$file" "${file}.backup"
+            sed -i '' 's/components.release/components.findByName("release") ?: components.getByName("default")/g' "$file"
+            echo "Patched $file"
+          done
       - name: Run Expo Prebuild
         script: |
           npx expo prebuild
       - name: Set Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-      - name: Fix Gradle configuration issues
+      - name: Fix compileSdkVersion
         script: |
-          # Fix compileSdkVersion issue
-          MAIN_GRADLE_FILE="$CM_BUILD_DIR/android/build.gradle"
+          # Ensure compileSdkVersion is set in app/build.gradle if not already present
           APP_GRADLE_FILE="$CM_BUILD_DIR/android/app/build.gradle"
           
-          # Ensure compileSdkVersion is set in app/build.gradle
           if ! grep -q "compileSdkVersion" "$APP_GRADLE_FILE"; then
             sed -i '' '/apply plugin: "com.android.application"/a\\
             android {\
                 compileSdkVersion 34\
             }' "$APP_GRADLE_FILE"
+          else
+            echo "compileSdkVersion already set in app/build.gradle"
           fi
-          
-          # Add missing maven repositories
-          sed -i '' '/allprojects {/,/}/s/repositories {/repositories {\
-                maven {\
-                    url "$rootDir\/../node_modules/expo/android/maven"\
-                }\
-                maven {\
-                    url "$rootDir\/../node_modules/react-native/android"\
-                }/' "$MAIN_GRADLE_FILE"
-          
-          # Update Gradle version if needed
-          sed -i '' 's/gradle:7\.[0-9]\.[0-9]/gradle:7.5.1/g' "$MAIN_GRADLE_FILE"
-          
-          # Fix the Android Gradle Plugin version if needed
-          sed -i '' 's/com.android.tools.build:gradle:[0-9]\.[0-9]\.[0-9]/com.android.tools.build:gradle:7.4.2/g' "$MAIN_GRADLE_FILE"
       - name: Build Android release
         script: |
           cd android
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease --info
     artifacts:
       - android/app/build/outputs/**/*.apk
     publishing:
