@@ -143,6 +143,7 @@ workflows:
           echo "android.enableJetifier=true" >> gradle.properties
           echo "org.gradle.configureondemand=true" >> gradle.properties
           echo "kotlin.code.style=official" >> gradle.properties
+          echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
           
           # Update build.gradle to fix common Android issues
           if [ -f build.gradle ]; then
@@ -153,6 +154,15 @@ workflows:
             
             # Ensure we're using the correct NDK version
             sed -i.bak -E 's/ndkVersion .*/ndkVersion "25.1.8937393"/' build.gradle || true
+            
+            # Add Java toolchain configuration
+            echo "
+            java {
+                toolchain {
+                    languageVersion.set(JavaLanguageVersion.of(17))
+                }
+            }
+            " >> build.gradle
           fi
           
           # Fix versions in app/build.gradle
@@ -160,6 +170,16 @@ workflows:
             sed -i.bak -E 's/compileSdkVersion .*/compileSdkVersion 33/' app/build.gradle || true
             sed -i.bak -E 's/targetSdkVersion .*/targetSdkVersion 33/' app/build.gradle || true
             sed -i.bak -E 's/minSdkVersion .*/minSdkVersion 21/' app/build.gradle || true
+            
+            # Add Java compatibility settings
+            echo "
+            android {
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+            " >> app/build.gradle
           fi
           
           # Create a separate file for packaging options
