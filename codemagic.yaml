@@ -26,9 +26,9 @@ workflows:
       
       - name: Install dependencies with specific versions
         script: |
-          # Clean npm cache and update npm
+          # Clean npm cache and install compatible npm version
           npm cache clean --force
-          npm install -g npm@latest
+          npm install -g npm@10.2.4
           
           # Install global tools
           npm install -g expo-cli
@@ -39,7 +39,7 @@ workflows:
           
           # Install specific versions of core packages
           npm install --save expo@52.0.38 --legacy-peer-deps
-          npm install --save react-native@0.76.7 --legacy-peer-deps
+          npm install --save react-native@0.76.9 --legacy-peer-deps
           npm install --save @react-native-async-storage/async-storage@1.23.1 --legacy-peer-deps
           npm install --save expo-system-ui@~4.0.8 --legacy-peer-deps
           npm install --save @expo/config-plugins@~9.0.0 --legacy-peer-deps
@@ -49,7 +49,7 @@ workflows:
           npm install --save cloudinary-react-native@1.0.0 --ignore-engines --legacy-peer-deps || echo "Skipping cloudinary-react-native"
           
           # Remove @types/react-native as it's included in react-native
-          npm uninstall @types/react-native --legacy-peer-deps
+          npm uninstall @types-react-native --legacy-peer-deps
           
           # Fix any remaining dependency issues
           npx expo install --fix
