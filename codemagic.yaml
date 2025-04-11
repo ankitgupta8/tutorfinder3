@@ -1,4 +1,3 @@
-
 workflows:
   react-native-android:
     name: React Native Android
