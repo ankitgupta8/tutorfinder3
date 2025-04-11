@@ -4,359 +4,197 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
-      node: 20.11.0
+      node: 18 # Use Node 18 LTS for better stability
       vars:
         PACKAGE_NAME: "com.ankitgupta8.tutorfinder"
-        EXPO_USERNAME: $EXPO_USERNAME
-        EXPO_PASSWORD: $EXPO_PASSWORD
-        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.jvmargs=-Xmx4096m"
-      xcode: latest
-      java: 17
+        # Ensure these are set in Codemagic UI Secrets:
+        # EXPO_USERNAME, EXPO_PASSWORD (if needed for login, not typically for prebuild)
+        # GOOGLE_SERVICES_JSON (Base64 encoded content of your google-services.json)
+        # CM_KEYSTORE (Base64 encoded content of your keystore.jks)
+        # CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS, CM_KEY_PASSWORD
+      xcode: latest # Or specific version if needed
+      java: 17 # Correct for modern RN/Expo
+      # cocoapods: default # Add if needed for iOS builds later
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
     scripts:
-      - name: Pre-build cleanup
+      - name: Clean up before install
         script: |
-          rm -rf node_modules
-          rm -rf android/build
-          rm -rf android/app/build
-          rm -f package-lock.json
-          rm -f yarn.lock
-          rm -rf $HOME/.gradle/caches/
-      
-      - name: Set up local properties
-        script: |
-          mkdir -p "$CM_BUILD_DIR/android"
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-      
-      - name: Fix package.json dependencies
-        script: |
-          # Create a clean package.json without the undefined dependency
-          # Use jq to remove @types/react-native from dependencies if present
-          if [ -f package.json ]; then
-            jq 'del(.dependencies["@types/react-native"])' package.json > package.json.tmp
-            mv package.json.tmp package.json
-          fi
-      
-      - name: Install dependencies
-        script: |
+          # Clean up previous artifacts if any
+          rm -rf node_modules android ios
+          # Clean yarn cache
           yarn cache clean
-          yarn install --network-timeout 300000
-          
-          # Install specific versions needed
-          yarn add expo@~52.0.0 --legacy-peer-deps
-          yarn add react-native@0.73.4 --legacy-peer-deps
-          yarn add @react-native-async-storage/async-storage --legacy-peer-deps
-          yarn add expo-system-ui --legacy-peer-deps
-          
-          # Add correct development dependencies
-          yarn add --dev metro@^0.81.0 metro-config@^0.81.0 metro-resolver@^0.81.0
-          yarn add --dev @expo/config-plugins@~9.0.0 @expo/prebuild-config@~8.0.0
-          
-          # Add @types/react-native as a dev dependency only
-          yarn add --dev @types/react-native
-      
-      - name: Install global tools
+          # Optionally remove lock file if suspected corruption, but usually not needed
+          # rm -f yarn.lock
+
+      - name: Install Node dependencies
         script: |
-          npm install -g expo-cli@latest
-          npm install -g eas-cli@latest
-          
-      - name: Configure Expo project
+          # Use --frozen-lockfile if yarn.lock is committed and reliable
+          yarn install --frozen-lockfile --network-timeout 180000
+          # Ensure Expo dependencies are aligned with the SDK
+          npx expo install --fix
+
+      - name: Install global CLI tools (Optional - npx recommended)
         script: |
-          # Create babel.config.js
-          cat > babel.config.js << 'EOL'
-          module.exports = function(api) {
-            api.cache(true);
-            return {
-              presets: ['babel-preset-expo'],
-              plugins: ['@babel/plugin-proposal-export-namespace-from']
-            };
-          };
-          EOL
-          
-          # Create metro.config.js
-          cat > metro.config.js << 'EOL'
-          const { getDefaultConfig } = require('expo/metro-config');
+          # Using npx expo and npx eas is generally preferred over global installs
+          # npm install -g expo-cli@latest
+          npm install -g eas-cli@latest # Keep eas-cli if you use EAS features elsewhere
 
-          const config = getDefaultConfig(__dirname);
+      # REMOVED: Configure Expo project (babel.config.js, metro.config.js, app.json)
+      # >> Ensure these files are correct in your Git repository <<
 
-          config.resolver.sourceExts = [
-            ...config.resolver.sourceExts,
-            'cjs',
-            'mjs'
-          ];
-
-          module.exports = config;
-          EOL
-          
-          # Create or update app.json
-          cat > app.json << 'EOL'
-          {
-            "expo": {
-              "name": "TutorFinder",
-              "slug": "tutorfinder",
-              "version": "1.0.0",
-              "orientation": "portrait",
-              "icon": "./assets/icon.png",
-              "userInterfaceStyle": "light",
-              "splash": {
-                "image": "./assets/splash.png",
-                "resizeMode": "contain",
-                "backgroundColor": "#ffffff"
-              },
-              "assetBundlePatterns": [
-                "**/*"
-              ],
-              "ios": {
-                "supportsTablet": true,
-                "bundleIdentifier": "com.ankitgupta8.tutorfinder"
-              },
-              "android": {
-                "adaptiveIcon": {
-                  "foregroundImage": "./assets/adaptive-icon.png",
-                  "backgroundColor": "#ffffff"
-                },
-                "package": "com.ankitgupta8.tutorfinder"
-              },
-              "web": {
-                "favicon": "./assets/favicon.png"
-              },
-              "doctor": {
-                "reactNativeDirectoryCheck": {
-                  "exclude": ["cloudinary-react-native", "react-native-keyboard-aware-scroll-view"],
-                  "listUnknownPackages": false
-                }
-              }
-            }
-          }
-          EOL
-          
-          # Create eas.json
-          cat > eas.json << 'EOL'
-          {
-            "build": {
-              "development": {
-                "developmentClient": true,
-                "distribution": "internal"
-              },
-              "preview": {
-                "distribution": "internal"
-              },
-              "production": {
-                "distribution": "store"
-              }
-            }
-          }
-          EOL
-          
-          # Create directories that might be needed
-          mkdir -p assets
-          
-          # Create placeholder icon files if they don't exist
-          if [ ! -f "./assets/icon.png" ]; then
-            echo "Creating placeholder icon.png"
-            convert -size 1024x1024 xc:white ./assets/icon.png || echo "Warning: could not create icon.png"
-          fi
-          
-          if [ ! -f "./assets/splash.png" ]; then
-            echo "Creating placeholder splash.png"
-            convert -size 1242x2436 xc:white ./assets/splash.png || echo "Warning: could not create splash.png"
-          fi
-          
-          if [ ! -f "./assets/adaptive-icon.png" ]; then
-            echo "Creating placeholder adaptive-icon.png"
-            convert -size 1024x1024 xc:white ./assets/adaptive-icon.png || echo "Warning: could not create adaptive-icon.png"
-          fi
-          
       - name: Run Expo Doctor
         script: |
-          npx expo-doctor || echo "Continuing despite expo-doctor issues"
-      
-      - name: Prebuild Android
+          # Check project configuration health
+          npx expo-doctor || echo "Expo Doctor found issues, attempting build anyway."
+
+      - name: Set up Android SDK local properties
         script: |
-          export EAS_NO_VCS=1
-          # Force yes to any prompts during prebuild
-          yes | npx expo prebuild --platform android --clean || echo "Prebuild completed with warnings"
-          
-      - name: Setup keystore
+          # Needed for Android builds to find the SDK
+          mkdir -p "$CM_BUILD_DIR/android"
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+
+      - name: Prebuild Android native project
         script: |
-          if [ -n "$CM_KEYSTORE" ]; then
-            echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/android/app/keystore.jks
-            
-            # Create keystore.properties file
-            cat > $CM_BUILD_DIR/android/keystore.properties << EOL
-            storeFile=keystore.jks
-            storePassword=$CM_KEYSTORE_PASSWORD
-            keyAlias=$CM_KEY_ALIAS
-            keyPassword=$CM_KEY_PASSWORD
-            EOL
+          # Generate the native Android project from Expo config
+          export EAS_NO_VCS=1 # Prevent Git checks in CI
+          npx expo prebuild --platform android --clean
+
+      - name: Place google-services.json (If using Firebase)
+        script: |
+          # Decode and place Firebase config file
+          # Ensure GOOGLE_SERVICES_JSON is set as Base64 encoded secret in Codemagic
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo $GOOGLE_SERVICES_JSON | base64 --decode > $CM_BUILD_DIR/android/app/google-services.json
+            echo "google-services.json placed."
           else
-            echo "No keystore provided. App will be built with debug signing."
+            echo "Warning: GOOGLE_SERVICES_JSON not set. Firebase might not work."
           fi
-      
-      - name: Configure Gradle
+
+      - name: Setup keystore and signing properties
         script: |
-          cd android
-          
-          # Update gradle.properties
-          cat > gradle.properties << 'EOL'
-          org.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=4096m
-          org.gradle.daemon=true
-          org.gradle.parallel=true
-          org.gradle.configureondemand=true
-          android.useAndroidX=true
-          android.enableJetifier=true
-          kotlin.code.style=official
-          android.disableAutomaticComponentCreation=true
-          EOL
-          
-          # Fix build.gradle versions
-          cat > build.gradle << 'EOL'
-          // Top-level build file where you can add configuration options common to all sub-projects/modules.
-          
-          buildscript {
-              ext {
-                  buildToolsVersion = "33.0.0"
-                  minSdkVersion = 21
-                  compileSdkVersion = 33
-                  targetSdkVersion = 33
-                  kotlinVersion = "1.8.0"
-                  ndkVersion = "25.1.8937393"
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath("com.android.tools.build:gradle:7.4.2")
-                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-                  classpath("de.undercouch:gradle-download-task:5.0.1")
-              }
-          }
-          
-          allprojects {
-              repositories {
-                  maven {
-                      // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-                      url("$rootDir/../node_modules/react-native/android")
-                  }
-                  maven {
-                      // Android JSC is installed from npm
-                      url("$rootDir/../node_modules/jsc-android/dist")
-                  }
-                  mavenCentral {
-                      // We don't want to fetch react-native from Maven Central as there are
-                      // older versions over there.
-                      content {
-                          excludeGroup "com.facebook.react"
-                      }
-                  }
-                  google()
-                  maven { url 'https://www.jitpack.io' }
-              }
-          }
-          EOL
-          
-          # Set correct gradle wrapper version
-          mkdir -p gradle/wrapper
-          cat > gradle/wrapper/gradle-wrapper.properties << 'EOL'
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-7.5.1-all.zip
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          EOL
-          
-      - name: Configure app build.gradle
-        script: |
-          if [ -f "$CM_BUILD_DIR/android/app/build.gradle" ]; then
-            # Add packaging options to app build.gradle
-            cat > /tmp/app-build-additions.gradle << 'EOL'
-            
+          # Decode keystore from Codemagic secret
+          # Ensure CM_KEYSTORE, CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS, CM_KEY_PASSWORD are set
+          if [ -n "$CM_KEYSTORE" ]; then
+            echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/android/app/myapp-keystore.jks # Use a clear name
+
+            # Create keystore.properties used by app/build.gradle
+            echo "MYAPP_UPLOAD_STORE_FILE=myapp-keystore.jks" > $CM_BUILD_DIR/android/keystore.properties
+            echo "MYAPP_UPLOAD_STORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> $CM_BUILD_DIR/android/keystore.properties
+            echo "MYAPP_UPLOAD_KEY_ALIAS=$CM_KEY_ALIAS" >> $CM_BUILD_DIR/android/keystore.properties
+            echo "MYAPP_UPLOAD_KEY_PASSWORD=$CM_KEY_PASSWORD" >> $CM_BUILD_DIR/android/keystore.properties
+            echo "Keystore and properties configured."
+
+            # Append signing config application to app/build.gradle
+            # This assumes the keystore.properties defines the variables used below
+            cat >> $CM_BUILD_DIR/android/app/build.gradle << EOL
+
+            // Apply signing configuration properties
+            apply from: file('../keystore.properties')
+
             android {
-                packagingOptions {
-                    pickFirst '**/*.so'
-                    exclude 'META-INF/DEPENDENCIES'
-                    exclude 'META-INF/LICENSE'
-                    exclude 'META-INF/LICENSE.txt'
-                    exclude 'META-INF/license.txt'
-                    exclude 'META-INF/NOTICE'
-                    exclude 'META-INF/NOTICE.txt'
-                    exclude 'META-INF/notice.txt'
-                    exclude 'META-INF/ASL2.0'
-                    exclude 'META-INF/*.kotlin_module'
+                signingConfigs {
+                    release {
+                        if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE')) {
+                            storeFile file(MYAPP_UPLOAD_STORE_FILE)
+                            storePassword MYAPP_UPLOAD_STORE_PASSWORD
+                            keyAlias MYAPP_UPLOAD_KEY_ALIAS
+                            keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+                        } else {
+                           println "Keystore properties not found for release signing."
+                        }
+                    }
                 }
-                
-                configurations.all {
-                    resolutionStrategy {
-                        force 'androidx.core:core-ktx:1.9.0'
-                        force 'androidx.appcompat:appcompat:1.6.1'
+                buildTypes {
+                    release {
+                        signingConfig signingConfigs.release
+                        // Other release settings like minify, shrinkResources...
                     }
                 }
             }
             EOL
-            
-            # Append the content to build.gradle
-            cat /tmp/app-build-additions.gradle >> $CM_BUILD_DIR/android/app/build.gradle
-            
-            # Add keystore configuration if available
-            if [ -n "$CM_KEYSTORE" ]; then
-              cat > /tmp/signing-config.gradle << EOL
-              
-              android {
-                  signingConfigs {
-                      release {
-                          if (project.rootProject.file("keystore.properties").exists()) {
-                              def keystoreProperties = new Properties()
-                              keystoreProperties.load(new FileInputStream(project.rootProject.file("keystore.properties")))
-                              storeFile file(keystoreProperties['storeFile'])
-                              storePassword keystoreProperties['storePassword']
-                              keyAlias keystoreProperties['keyAlias']
-                              keyPassword keystoreProperties['keyPassword']
-                          }
-                      }
-                  }
-                  buildTypes {
-                      release {
-                          signingConfig signingConfigs.release
-                      }
-                  }
-              }
-              EOL
-              
-              # Append signing config
-              cat /tmp/signing-config.gradle >> $CM_BUILD_DIR/android/app/build.gradle
-            fi
+            echo "Signing configuration applied to app/build.gradle"
           else
-            echo "Warning: android/app/build.gradle not found"
+            echo "Warning: CM_KEYSTORE not set. Release build will not be signed."
           fi
-          
-      - name: Build Android Release
+
+      # REMOVED: Configure Gradle (root build.gradle, gradle-wrapper.properties)
+      # >> Let expo prebuild handle these based on your Expo SDK version <<
+
+      - name: Configure Gradle JVM args and Packaging Options
+        script: |
+          # Set Gradle JVM arguments (important for performance)
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m" >> $CM_BUILD_DIR/android/gradle.properties
+          echo "org.gradle.daemon=true" >> $CM_BUILD_DIR/android/gradle.properties
+          echo "org.gradle.parallel=true" >> $CM_BUILD_DIR/android/gradle.properties
+          echo "org.gradle.configureondemand=true" >> $CM_BUILD_DIR/android/gradle.properties
+
+          # Append common packaging options to avoid conflicts
+          cat >> $CM_BUILD_DIR/android/app/build.gradle << EOL
+
+          android {
+              packagingOptions {
+                  pickFirst '**/*.so' // Pick first native library found
+                  exclude 'META-INF/DEPENDENCIES'
+                  exclude 'META-INF/LICENSE'
+                  exclude 'META-INF/LICENSE.txt'
+                  exclude 'META-INF/license.txt'
+                  exclude 'META-INF/NOTICE'
+                  exclude 'META-INF/NOTICE.txt'
+                  exclude 'META-INF/notice.txt'
+                  exclude 'META-INF/ASL2.0'
+                  exclude('META-INF/*.kotlin_module')
+              }
+              // You might need specific configurations or resolution strategies here
+              // if you encounter specific dependency conflicts after prebuild
+              // configurations.all {
+              //     resolutionStrategy {
+              //         // Example: force 'androidx.core:core-ktx:1.9.0'
+              //     }
+              // }
+          }
+          EOL
+          echo "Gradle properties and packaging options configured."
+
+
+      - name: Build Android Release APK
         script: |
           cd android
+          # Ensure gradlew is executable
           chmod +x ./gradlew
+          # Clean previous build outputs
           ./gradlew clean
-          
-          # Run with debug info but continue even if it fails
-          ./gradlew assembleRelease --info --stacktrace > ../gradle_build.log 2>&1 || {
-            echo "Gradle build failed, checking logs..."
-            cat ../gradle_build.log | grep -A 20 "FAILURE:" || echo "No specific failure message found"
-            cat ../gradle_build.log | grep -B 5 -A 15 "error:" || echo "No specific error messages found"
+          # Build the release APK, capture logs
+          echo "Starting Gradle build..."
+          ./gradlew assembleRelease --stacktrace > ../build.log 2>&1 || {
+            echo "Gradle build failed. Check build.log for details."
+            cat ../build.log
             exit 1
           }
-          
-      - name: Verify APK
+          echo "Gradle build finished."
+
+      - name: Verify APK existence
         script: |
-          ls -la $CM_BUILD_DIR/android/app/build/outputs/apk/release/ || echo "No APK found in expected location"
+          echo "Checking for generated APK..."
+          ls -la $CM_BUILD_DIR/android/app/build/outputs/apk/release/
           if [ -f "$CM_BUILD_DIR/android/app/build/outputs/apk/release/app-release.apk" ]; then
-            echo "✅ APK generation completed successfully!"
+            echo "APK generated successfully: app-release.apk"
           else
-            echo "❌ APK generation failed - no APK found"
+            echo "Error: Release APK not found!"
+            # Optional: Check if an AAB was generated instead if that's the target
+            # ls -la $CM_BUILD_DIR/android/app/build/outputs/bundle/release/
             exit 1
           fi
 
     artifacts:
-      - android/app/build/outputs/apk/release/*.apk
-      - android/app/build/outputs/mapping/release/mapping.txt
-      - gradle_build.log
+      - android/app/build/outputs/**/**/*.apk # Capture any APKs generated
+      - android/app/build/outputs/**/**/*.aab # Capture AAB if generated
+      - android/app/build/outputs/mapping/release/mapping.txt # Proguard mapping
+      - build.log # Capture the Gradle build log
 
     publishing:
       email:
@@ -364,4 +202,4 @@ workflows:
           - ankit.kapilvastu@gmail.com
         notify:
           success: true
-          failure: true
+          failure: true # Important for debugging
