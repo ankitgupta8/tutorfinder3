@@ -22,7 +22,11 @@ workflows:
           npm install expo-system-ui@3.0.0
       - name: Clear Metro Bundler Cache
         script: |
-          npx expo start --clear
+          npx react-native-community/cli start --reset-cache --no-interactive || true
+          # Alternative approach
+          rm -rf $HOME/.npm/_cacache
+          rm -rf $TMPDIR/metro-*
+          rm -rf $TMPDIR/haste-map-*
       - name: Validate Metro Configuration
         script: |
           if [ ! -f metro.config.js ]; then
