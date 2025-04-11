@@ -1,8 +1,7 @@
-{
-  "name": "ankitproject",
+ { "name": "ankitproject",
   "version": "1.0.0",
   "engines": {
-    "node": ">=16.0.0",
+    "node": ">=18.0.0", // Updated Node requirement often better for RN 0.73+
     "yarn": ">=1.22.0"
   },
   "scripts": {
@@ -10,17 +9,19 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:android": "eas build --platform android --profile preview",
-    "prebuild": "rd /s /q node_modules && yarn install",
-    "postinstall": "yarn expo install --fix",
-    "clean": "rd /s /q node_modules && del yarn.lock && yarn install",
-    "doctor": "expo-doctor",
-    "install:expo": "yarn add expo@52.0.38"
+    "build:android:eas": "eas build --platform android --profile preview", // Renamed to avoid confusion
+    "prebuild:clean": "yarn run clean && yarn install", // Renamed prebuild
+    "postinstall": "yarn expo install --fix", // Keep this, it's important!
+    "clean": "rimraf node_modules && rimraf yarn.lock && rimraf ios/Pods && rimraf ios/Podfile.lock && rimraf android/.gradle && rimraf android/build && rimraf android/app/build", // Use rimraf for cross-platform compatibility
+    "doctor": "npx expo-doctor" // Use npx to ensure latest doctor is used
+    // Removed "install:expo" script
   },
   "dependencies": {
+    // Keep your existing dependencies, BUT ensure they are compatible with Expo 52 / RN 0.76.x
+    // yarn expo install --fix should help, but manually check major ones if issues persist
     "@cloudinary/url-gen": "^1.21.0",
-    "@expo/config": "^10.0.11",
-    "@expo/metro-config": "^0.19.12",
+    "@expo/config": "^10.0.11", // Let expo install --fix manage this
+    "@expo/metro-config": "^0.19.12", // Let expo install --fix manage this
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-native-firebase/app": "^21.6.1",
     "@react-native-firebase/firestore": "^21.6.1",
@@ -30,23 +31,23 @@
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/native-stack": "^7.2.0",
     "@react-navigation/stack": "^7.1.0",
-    "@types/react": "~18.3.12",
+    "@types/react": "~18.3.12", // Check if this specific minor version is needed or if ~18.2.0 works
     "cloudinary": "^2.6.0",
-    "cloudinary-react-native": "1.0.0",
-    "expo": "52.0.38",
+    "cloudinary-react-native": "1.0.0", // Ensure this supports RN 0.76
+    "expo": "~52.0.38", // Target Expo SDK 52
     "expo-asset": "~11.0.5",
     "expo-constants": "~17.0.8",
     "expo-image-picker": "^16.0.6",
     "expo-linear-gradient": "~14.0.2",
     "expo-status-bar": "~2.0.1",
     "expo-system-ui": "~4.0.8",
-    "firebase": "^11.1.0",
+    "firebase": "^11.1.0", // Ensure this Firebase JS SDK version works well with @react-native-firebase versions
     "lottie-react-native": "7.1.0",
     "react": "18.3.1",
-    "react-native": "0.76.9",
+    "react-native": "0.76.9", // Keeping 0.76.9 - be vigilant for compatibility issues
     "react-native-dropdown-picker": "^5.4.6",
     "react-native-gesture-handler": "~2.20.2",
-    "react-native-keyboard-aware-scroll-view": "^0.9.5",
+    "react-native-keyboard-aware-scroll-view": "^0.9.5", // Ensure this supports RN 0.76
     "react-native-pager-view": "6.5.1",
     "react-native-paper": "^5.12.5",
     "react-native-picker-select": "^9.0.0",
@@ -54,26 +55,29 @@
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0",
     "react-native-tab-view": "^4.0.5",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3" // Or maybe latest 5.x? ~5.5.3
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@babel/plugin-transform-class-properties": "^7.23.3",
-    "@babel/plugin-transform-nullish-coalescing-operator": "^7.23.4",
-    "@babel/plugin-transform-optional-chaining": "^7.23.4",
-    "@react-native-community/cli": "^15.1.3",
-    "@types/react-native": "^0.73.0",
-    "eas-cli": "^5.9.0",
-    "expo-doctor": "^1.12.8",
+    // Remove specific babel plugins if using standard babel-preset-expo, unless needed for specific features
+    // "@babel/plugin-transform-class-properties": "^7.23.3",
+    // "@babel/plugin-transform-nullish-coalescing-operator": "^7.23.4",
+    // "@babel/plugin-transform-optional-chaining": "^7.23.4",
+    "@react-native-community/cli": "^15.1.3", // Check compatibility with RN 0.76
+    "@types/react-native": "^0.73.0", // This often needs to align with RN version, but sometimes causes issues. Keep for now.
+    "eas-cli": "^5.9.0", // Use latest stable `eas-cli`, e.g., ^10.0.0
+    "expo-doctor": "^1.12.8", // Let expo install --fix manage this
     "lru-cache": "^10.1.0",
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.5" // Added for clean script
   },
   "private": true,
   "resolutions": {
-    "@expo/config-plugins": "~6.0.0",
-    "@expo/prebuild-config": "~6.0.0",
-    "expo-modules-autolinking": "~1.1.0",
-    "glob": "^9.3.5",
-    "@xmldom/xmldom": "^0.8.10"
+    // Remove Expo related resolutions - let expo install --fix handle them
+    // "@expo/config-plugins": "~6.0.0",
+    // "@expo/prebuild-config": "~6.0.0",
+    // "expo-modules-autolinking": "~1.1.0",
+    "glob": "^9.3.5", // Keep if needed
+    "@xmldom/xmldom": "^0.8.10" // Keep if needed
+    // Add resolutions if yarn/expo install --fix doesn't solve a specific peer dependency issue
   }
 }
