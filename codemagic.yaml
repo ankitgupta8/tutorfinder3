@@ -26,18 +26,36 @@ workflows:
       
       - name: Install dependencies with specific versions
         script: |
+          # Clean npm cache and update npm
+          npm cache clean --force
+          npm install -g npm@latest
+          
+          # Install global tools
+          npm install -g expo-cli
+          npm install -g eas-cli
+          
+          # Install project dependencies with legacy peer deps
           npm install --legacy-peer-deps
-          npm install --save expo@~52.0.42 --legacy-peer-deps
-          npm install --save react-native@0.76.9 --legacy-peer-deps
+          
+          # Install specific versions of core packages
+          npm install --save expo@52.0.38 --legacy-peer-deps
+          npm install --save react-native@0.76.7 --legacy-peer-deps
           npm install --save @react-native-async-storage/async-storage@1.23.1 --legacy-peer-deps
-          npm install --save expo-system-ui --legacy-peer-deps
+          npm install --save expo-system-ui@~4.0.8 --legacy-peer-deps
+          npm install --save @expo/config-plugins@~9.0.0 --legacy-peer-deps
+          npm install --save @expo/prebuild-config@~8.0.0 --legacy-peer-deps
           
           # Install cloudinary with ignore-engines flag
-          npm install --save cloudinary-react-native --ignore-engines --legacy-peer-deps || echo "Skipping cloudinary-react-native"
+          npm install --save cloudinary-react-native@1.0.0 --ignore-engines --legacy-peer-deps || echo "Skipping cloudinary-react-native"
+          
+          # Remove @types/react-native as it's included in react-native
+          npm uninstall @types/react-native --legacy-peer-deps
+          
+          # Fix any remaining dependency issues
+          npx expo install --fix
 
       - name: Install required development tools
         script: |
-          npm install -g eas-cli
           npm install -g sharp-cli
           brew install watchman || true
           
@@ -162,9 +180,9 @@ workflows:
           # Add apply from line to end of app build.gradle
           echo "apply from: 'packaging-options.gradle'" >> app/build.gradle
           
-          # Update Gradle wrapper version to 7.5.1
+          # Update Gradle wrapper version to 7.6.1
           if [ -f gradle/wrapper/gradle-wrapper.properties ]; then
-            sed -i.bak -E 's/distributionUrl=.*/distributionUrl=https\\:\/\/services.gradle.org\/distributions\/gradle-7.5.1-all.zip/' gradle/wrapper/gradle-wrapper.properties || true
+            sed -i.bak -E 's/distributionUrl=.*/distributionUrl=https\\:\/\/services.gradle.org\/distributions\/gradle-7.6.1-all.zip/' gradle/wrapper/gradle-wrapper.properties || true
           fi
           
       - name: Build Android release with full debug output
