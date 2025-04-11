@@ -34,50 +34,97 @@ workflows:
           npx expo doctor || true
       - name: Patch Expo Gradle Files
         script: |
-          # Fix the "Could not get unknown property 'release'" error
+          # Fix for the ExpoModulesCorePlugin.gradle
           EXPO_CORE_PLUGIN_FILE="$CM_BUILD_DIR/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle"
           
           if [ -f "$EXPO_CORE_PLUGIN_FILE" ]; then
             # Create backup
             cp "$EXPO_CORE_PLUGIN_FILE" "${EXPO_CORE_PLUGIN_FILE}.backup"
             
-            # Patch the file to fix the 'release' property issue
-            sed -i '' 's/components.release/components.findByName("release") ?: components.getByName("default")/g' "$EXPO_CORE_PLUGIN_FILE"
+            # Replace the problematic line with a safer approach that checks if components has a 'release' component
+            sed -i '' 's/components.release/components.findByName("release") ?: components.first()/g' "$EXPO_CORE_PLUGIN_FILE"
             
-            echo "Patched ExpoModulesCorePlugin.gradle to fix release property issue"
+            echo "Patched ExpoModulesCorePlugin.gradle"
           else
             echo "Warning: Could not find ExpoModulesCorePlugin.gradle file"
           fi
           
-          # Also patch other Expo gradle files that might have the same issue
-          find "$CM_BUILD_DIR/node_modules" -name "*.gradle" -type f -exec grep -l "components.release" {} \; | while read -r file; do
-            cp "$file" "${file}.backup"
-            sed -i '' 's/components.release/components.findByName("release") ?: components.getByName("default")/g' "$file"
-            echo "Patched $file"
+          # Also check and patch other gradle files
+          for FILE in $(find "$CM_BUILD_DIR/node_modules" -name "*.gradle" -type f -exec grep -l "components.release" {} \;); do
+            cp "$FILE" "${FILE}.backup"
+            sed -i '' 's/components.release/components.findByName("release") ?: components.first()/g' "$FILE"
+            echo "Patched $FILE"
           done
+          
+          # Create a helper file to apply compileSdkVersion to all modules
+          echo '
+          // build.gradle root file patch
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty("android")) {
+                      android {
+                          if (!project.android.hasProperty("compileSdkVersion")) {
+                              compileSdkVersion 33
+                          }
+                          if (!project.android.hasProperty("targetSdkVersion")) {
+                              defaultConfig {
+                                  targetSdkVersion 33
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+          ' > "$CM_BUILD_DIR/sdk_version_patch.gradle"
       - name: Run Expo Prebuild
         script: |
           npx expo prebuild
       - name: Set Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-      - name: Fix compileSdkVersion
+      - name: Apply Gradle Patches to Generated Files
         script: |
-          # Ensure compileSdkVersion is set in app/build.gradle if not already present
-          APP_GRADLE_FILE="$CM_BUILD_DIR/android/app/build.gradle"
+          # Apply the compileSdkVersion patch to the main build.gradle
+          MAIN_GRADLE_FILE="$CM_BUILD_DIR/android/build.gradle"
           
-          if ! grep -q "compileSdkVersion" "$APP_GRADLE_FILE"; then
-            sed -i '' '/apply plugin: "com.android.application"/a\\
-            android {\
-                compileSdkVersion 34\
-            }' "$APP_GRADLE_FILE"
-          else
-            echo "compileSdkVersion already set in app/build.gradle"
+          if [ -f "$MAIN_GRADLE_FILE" ]; then
+            echo "apply from: '$CM_BUILD_DIR/sdk_version_patch.gradle'" >> "$MAIN_GRADLE_FILE"
+            echo "Added sdk_version_patch.gradle to main build.gradle"
+          fi
+          
+          # Make sure each module has compileSdkVersion
+          for GRADLE_FILE in $(find "$CM_BUILD_DIR/android" -name "build.gradle"); do
+            if grep -q "android {" "$GRADLE_FILE" && ! grep -q "compileSdkVersion" "$GRADLE_FILE"; then
+              sed -i '' '/android {/a\\
+              compileSdkVersion 33' "$GRADLE_FILE"
+              echo "Added compileSdkVersion to $GRADLE_FILE"
+            fi
+          done
+          
+          # Downgrade Gradle if necessary
+          sed -i '' 's/gradle-[0-9]\.[0-9]\.[0-9]/gradle-7.3.3/g' "$CM_BUILD_DIR/android/gradle/wrapper/gradle-wrapper.properties"
+          
+          # Apply a specific Gradle version in settings file
+          if [ -f "$CM_BUILD_DIR/android/settings.gradle" ]; then
+            echo "
+            pluginManagement {
+                repositories {
+                    google()
+                    mavenCentral()
+                    gradlePluginPortal()
+                }
+            }
+            " > "$CM_BUILD_DIR/android/settings.gradle.new"
+            cat "$CM_BUILD_DIR/android/settings.gradle" >> "$CM_BUILD_DIR/android/settings.gradle.new"
+            mv "$CM_BUILD_DIR/android/settings.gradle.new" "$CM_BUILD_DIR/android/settings.gradle"
           fi
       - name: Build Android release
         script: |
           cd android
-          ./gradlew assembleRelease --info
+          # Clean first
+          ./gradlew clean
+          # Then build with detailed logs
+          ./gradlew assembleRelease --stacktrace
     artifacts:
       - android/app/build/outputs/**/*.apk
     publishing:
