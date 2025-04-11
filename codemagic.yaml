@@ -1,0 +1,201 @@
+workflows:
+  expo-react-native-android:
+    name: Expo React Native Android Build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      node: 20.11.0
+      vars:
+        PACKAGE_NAME: "com.ankitgupta8.tutorfinder"
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false"
+      xcode: latest
+      java: 17
+    scripts:
+      - name: Pre-build cleanup
+        script: |
+          rm -rf node_modules
+          rm -rf android/build
+          rm -rf android/app/build
+          rm -f package-lock.json
+          rm -f yarn.lock
+      
+      - name: Set up local properties
+        script: |
+          mkdir -p "$CM_BUILD_DIR/android"
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      
+      - name: Install dependencies with specific versions
+        script: |
+          npm install --legacy-peer-deps
+          npm install --save expo@~52.0.42 --legacy-peer-deps
+          npm install --save react-native@0.76.9 --legacy-peer-deps
+          npm install --save @react-native-async-storage/async-storage@1.23.1 --legacy-peer-deps
+          npm install --save expo-system-ui --legacy-peer-deps
+          
+          # Install cloudinary with ignore-engines flag
+          npm install --save cloudinary-react-native --ignore-engines --legacy-peer-deps || echo "Skipping cloudinary-react-native"
+
+      - name: Install required development tools
+        script: |
+          npm install -g eas-cli
+          npm install -g sharp-cli
+          brew install watchman || true
+          
+      - name: Clean project and cache
+        script: |
+          rm -rf node_modules/.cache
+          rm -rf $HOME/.npm/_cacache
+          watchman watch-del-all || true
+      
+      - name: Setup Metro configuration
+        script: |
+          if [ ! -f metro.config.js ]; then
+            echo "const { getDefaultConfig } = require('@expo/metro-config');" > metro.config.js
+            echo "const config = getDefaultConfig(__dirname);" >> metro.config.js
+            echo "module.exports = config;" >> metro.config.js
+          fi
+          
+          if [ ! -f app.json ]; then
+            echo '{"expo": {"name": "TutorFinder", "slug": "tutorfinder"}}' > app.json
+          fi
+
+      - name: Run Expo Doctor to validate setup
+        script: |
+          npx expo-doctor || true
+          
+      - name: Prebuild Android native code
+        script: |
+          if [ ! -f eas.json ]; then
+            echo '{
+              "build": {
+                "development": {
+                  "developmentClient": true,
+                  "distribution": "internal"
+                },
+                "preview": {
+                  "distribution": "internal"
+                },
+                "production": {}
+              }
+            }' > eas.json
+          fi
+          
+          export CI=true
+          export EAS_NO_VCS=1
+          npx expo prebuild --platform android --clean
+
+      - name: Setup keystore for signing
+        script: |
+          if [ -n "$CM_KEYSTORE" ]; then
+            echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/android/app/keystore.jks
+            
+            # Create a separate file for signing config
+            echo "android {" > $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "    signingConfigs {" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "        release {" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "            storeFile file(\"keystore.jks\")" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "            storePassword \"$CM_KEYSTORE_PASSWORD\"" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "            keyAlias \"$CM_KEY_ALIAS\"" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "            keyPassword \"$CM_KEY_PASSWORD\"" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "        }" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "    }" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "    buildTypes {" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "        release {" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "            signingConfig signingConfigs.release" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "        }" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "    }" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            echo "}" >> $CM_BUILD_DIR/android/app/signing-config.gradle
+            
+            # Add apply from line to end of build.gradle
+            echo "apply from: 'signing-config.gradle'" >> "$CM_BUILD_DIR/android/app/build.gradle"
+          else
+            echo "No keystore found in environment variables. APK will be unsigned."
+          fi
+          
+      - name: Update Gradle configuration
+        script: |
+          cd android
+          
+          # Update gradle.properties
+          touch gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=4096m" >> gradle.properties
+          echo "org.gradle.parallel=true" >> gradle.properties
+          echo "org.gradle.daemon=true" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+          echo "org.gradle.configureondemand=true" >> gradle.properties
+          echo "kotlin.code.style=official" >> gradle.properties
+          
+          # Update build.gradle to fix common Android issues
+          if [ -f build.gradle ]; then
+            # Fix version issues in root build.gradle
+            sed -i.bak -E 's/ext.kotlin_version = .*/ext.kotlin_version = "1.7.0"/' build.gradle || true
+            sed -i.bak -E 's/classpath\("com.android.tools.build:gradle:.*"\)/classpath("com.android.tools.build:gradle:7.4.2")/' build.gradle || true
+            sed -i.bak -E 's/classpath\("org.jetbrains.kotlin:kotlin-gradle-plugin:.*"\)/classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.0")/' build.gradle || true
+            
+            # Ensure we're using the correct NDK version
+            sed -i.bak -E 's/ndkVersion .*/ndkVersion "25.1.8937393"/' build.gradle || true
+          fi
+          
+          # Fix versions in app/build.gradle
+          if [ -f app/build.gradle ]; then
+            sed -i.bak -E 's/compileSdkVersion .*/compileSdkVersion 33/' app/build.gradle || true
+            sed -i.bak -E 's/targetSdkVersion .*/targetSdkVersion 33/' app/build.gradle || true
+            sed -i.bak -E 's/minSdkVersion .*/minSdkVersion 21/' app/build.gradle || true
+          fi
+          
+          # Create a separate file for packaging options
+          echo "android {" > app/packaging-options.gradle
+          echo "    packagingOptions {" >> app/packaging-options.gradle
+          echo "        pickFirst '**/*.so'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/DEPENDENCIES'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/LICENSE'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/LICENSE.txt'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/license.txt'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/NOTICE'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/NOTICE.txt'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/notice.txt'" >> app/packaging-options.gradle
+          echo "        exclude 'META-INF/ASL2.0'" >> app/packaging-options.gradle
+          echo "    }" >> app/packaging-options.gradle
+          echo "}" >> app/packaging-options.gradle
+          
+          # Add apply from line to end of app build.gradle
+          echo "apply from: 'packaging-options.gradle'" >> app/build.gradle
+          
+          # Update Gradle wrapper version to 7.5.1
+          if [ -f gradle/wrapper/gradle-wrapper.properties ]; then
+            sed -i.bak -E 's/distributionUrl=.*/distributionUrl=https\\:\/\/services.gradle.org\/distributions\/gradle-7.5.1-all.zip/' gradle/wrapper/gradle-wrapper.properties || true
+          fi
+          
+      - name: Build Android release with full debug output
+        script: |
+          cd android
+          ./gradlew clean
+          ./gradlew --stacktrace --info assembleRelease > ../gradle_full_debug.log 2>&1 || true
+          
+          # Print out the key error messages
+          echo "===== GRADLE BUILD ERRORS ====="
+          cat ../gradle_full_debug.log | grep -A 20 "FAILURE" || echo "No specific FAILURE message found"
+          cat ../gradle_full_debug.log | grep -A 10 -B 10 "error:" || echo "No specific error: messages found"
+          cat ../gradle_full_debug.log | grep -A 5 -B 5 "Exception" || echo "No specific Exception messages found"
+          
+          # Try build again with regular output for cleaner logs
+          ./gradlew assembleRelease
+          
+      - name: Generate build info
+        script: |
+          echo "Build completed on $(date)"
+          ls -la $CM_BUILD_DIR/android/app/build/outputs/apk/release || echo "No APK found"
+
+    artifacts:
+      - android/app/build/outputs/apk/release/*.apk
+      - android/app/build/outputs/**/mapping.txt
+      - gradle_full_debug.log
+
+    publishing:
+      email:
+        recipients:
+          - ankit.kapilvastu@gmail.com
+        notify:
+          success: true
+          failure: true
