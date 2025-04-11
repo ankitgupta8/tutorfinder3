@@ -61,7 +61,7 @@ workflows:
 
       - name: Run Expo Doctor to validate setup
         script: |
-          npx expo-doctor || true
+          yarn expo-doctor || true
           
       - name: Prebuild Android native code
         script: |
@@ -82,7 +82,7 @@ workflows:
           
           export CI=true
           export EAS_NO_VCS=1
-          npx expo prebuild --platform android --clean
+          yarn expo prebuild --platform android --clean
 
       - name: Setup keystore for signing
         script: |
