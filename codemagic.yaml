@@ -183,14 +183,8 @@
                 # Ensure we're using the correct NDK version
                 sed -i.bak -E 's/ndkVersion .*/ndkVersion "25.1.8937393"/' build.gradle || true
                 
-                # Add Java toolchain configuration
-                echo "
-                java {
-                    toolchain {
-                        languageVersion.set(JavaLanguageVersion.of(17))
-                    }
-                }
-                " >> build.gradle
+                # Remove any existing Java toolchain configuration
+                sed -i.bak '/java {/,/}/d' build.gradle || true
               fi
               
               # Fix versions in app/build.gradle
@@ -199,15 +193,15 @@
                 sed -i.bak -E 's/targetSdkVersion .*/targetSdkVersion 33/' app/build.gradle || true
                 sed -i.bak -E 's/minSdkVersion .*/minSdkVersion 21/' app/build.gradle || true
                 
-                # Add Java compatibility settings
-                echo "
-                android {
-                    compileOptions {
-                        sourceCompatibility JavaVersion.VERSION_17
-                        targetCompatibility JavaVersion.VERSION_17
-                    }
-                }
-                " >> app/build.gradle
+                # Remove any existing Java compatibility settings
+                sed -i.bak '/compileOptions {/,/}/d' app/build.gradle || true
+                
+                # Add Java compatibility settings in the correct location
+                sed -i.bak '/android {/a \
+                compileOptions {\
+                    sourceCompatibility JavaVersion.VERSION_17\
+                    targetCompatibility JavaVersion.VERSION_17\
+                }' app/build.gradle || true
               fi
               
               # Create a separate file for packaging options
