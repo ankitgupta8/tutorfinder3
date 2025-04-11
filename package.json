@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "engines": {
     "node": ">=16.0.0",
-    "npm": ">=8.0.0"
+    "yarn": ">=1.22.0"
   },
   "scripts": {
     "start": "expo start --dev-client",
@@ -11,11 +11,11 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:android": "eas build --platform android --profile preview",
-    "prebuild": "rd /s /q node_modules && npm install",
-    "postinstall": "npx expo install --fix",
-    "clean": "rd /s /q node_modules && del package-lock.json && npm install",
+    "prebuild": "rd /s /q node_modules && yarn install",
+    "postinstall": "yarn expo install --fix",
+    "clean": "rd /s /q node_modules && del yarn.lock && yarn install",
     "doctor": "expo-doctor",
-    "install:expo": "npm install expo@52.0.38 --legacy-peer-deps"
+    "install:expo": "yarn add expo@52.0.38"
   },
   "dependencies": {
     "@cloudinary/url-gen": "^1.21.0",
@@ -43,7 +43,7 @@
     "firebase": "^11.1.0",
     "lottie-react-native": "7.1.0",
     "react": "18.3.1",
-    "react-native": "0.76.7",
+    "react-native": "0.76.9",
     "react-native-dropdown-picker": "^5.4.6",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
