@@ -104,8 +104,9 @@ workflows:
           # Downgrade Gradle if necessary
           sed -i '' 's/gradle-[0-9]\.[0-9]\.[0-9]/gradle-7.3.3/g' "$CM_BUILD_DIR/android/gradle/wrapper/gradle-wrapper.properties"
           
-          # Apply a specific Gradle version in settings file
-          if [ -f "$CM_BUILD_DIR/android/settings.gradle" ]; then
+          # Check if pluginManagement already exists in settings.gradle before adding it
+          SETTINGS_GRADLE="$CM_BUILD_DIR/android/settings.gradle"
+          if [ -f "$SETTINGS_GRADLE" ] && ! grep -q "pluginManagement" "$SETTINGS_GRADLE"; then
             echo "
             pluginManagement {
                 repositories {
@@ -114,9 +115,12 @@ workflows:
                     gradlePluginPortal()
                 }
             }
-            " > "$CM_BUILD_DIR/android/settings.gradle.new"
-            cat "$CM_BUILD_DIR/android/settings.gradle" >> "$CM_BUILD_DIR/android/settings.gradle.new"
-            mv "$CM_BUILD_DIR/android/settings.gradle.new" "$CM_BUILD_DIR/android/settings.gradle"
+            " > "$SETTINGS_GRADLE.new"
+            cat "$SETTINGS_GRADLE" >> "$SETTINGS_GRADLE.new"
+            mv "$SETTINGS_GRADLE.new" "$SETTINGS_GRADLE"
+            echo "Added pluginManagement block to settings.gradle"
+          else
+            echo "pluginManagement block already exists in settings.gradle, skipping addition"
           fi
       - name: Build Android release
         script: |
