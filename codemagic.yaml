@@ -38,10 +38,38 @@ workflows:
       - name: Set Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Fix Gradle configuration issues
+        script: |
+          # Fix compileSdkVersion issue
+          MAIN_GRADLE_FILE="$CM_BUILD_DIR/android/build.gradle"
+          APP_GRADLE_FILE="$CM_BUILD_DIR/android/app/build.gradle"
+          
+          # Ensure compileSdkVersion is set in app/build.gradle
+          if ! grep -q "compileSdkVersion" "$APP_GRADLE_FILE"; then
+            sed -i '' '/apply plugin: "com.android.application"/a\\
+            android {\
+                compileSdkVersion 34\
+            }' "$APP_GRADLE_FILE"
+          fi
+          
+          # Add missing maven repositories
+          sed -i '' '/allprojects {/,/}/s/repositories {/repositories {\
+                maven {\
+                    url "$rootDir\/../node_modules/expo/android/maven"\
+                }\
+                maven {\
+                    url "$rootDir\/../node_modules/react-native/android"\
+                }/' "$MAIN_GRADLE_FILE"
+          
+          # Update Gradle version if needed
+          sed -i '' 's/gradle:7\.[0-9]\.[0-9]/gradle:7.5.1/g' "$MAIN_GRADLE_FILE"
+          
+          # Fix the Android Gradle Plugin version if needed
+          sed -i '' 's/com.android.tools.build:gradle:[0-9]\.[0-9]\.[0-9]/com.android.tools.build:gradle:7.4.2/g' "$MAIN_GRADLE_FILE"
       - name: Build Android release
         script: |
           cd android
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --stacktrace
     artifacts:
       - android/app/build/outputs/**/*.apk
     publishing:
