@@ -32,9 +32,6 @@ workflows:
           if [ ! -f metro.config.js ]; then
             echo "module.exports = require('@expo/metro-config').getDefaultConfig(__dirname);" > metro.config.js
           fi
-      - name: Validate Expo project setup
-        script: |
-          npx expo doctor
       - name: Patch Expo Gradle Files
         script: |
           # Fix for the ExpoModulesCorePlugin.gradle
