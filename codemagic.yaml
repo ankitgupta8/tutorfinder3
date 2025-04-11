@@ -1,205 +1,51 @@
+
 workflows:
-  expo-react-native-android:
-    name: Expo React Native Android Build
+  react-native-android:
+    name: React Native Android
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
-      node: 18 # Use Node 18 LTS for better stability
       vars:
-        PACKAGE_NAME: "com.ankitgupta8.tutorfinder"
-        # Ensure these are set in Codemagic UI Secrets:
-        # EXPO_USERNAME, EXPO_PASSWORD (if needed for login, not typically for prebuild)
-        # GOOGLE_SERVICES_JSON (Base64 encoded content of your google-services.json)
-        # CM_KEYSTORE (Base64 encoded content of your keystore.jks)
-        # CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS, CM_KEY_PASSWORD
-      xcode: latest # Or specific version if needed
-      java: 17 # Correct for modern RN/Expo
-      # cocoapods: default # Add if needed for iOS builds later
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: 'main'
-          include: true
+        PACKAGE_NAME: "com.guptaankit9.ankitproject"
     scripts:
-      - name: Clean up before install
+      - name: Set Android SDK location
         script: |
-          # Clean up previous artifacts if any
-          rm -rf node_modules android ios
-          # Clean yarn cache
-          yarn cache clean
-          # Optionally remove lock file if suspected corruption, but usually not needed
-          # rm -f yarn.lock
-
-      - name: Install Node dependencies
-        script: |
-          # Use --frozen-lockfile if yarn.lock is committed and reliable
-          yarn install --frozen-lockfile --network-timeout 180000
-          # Ensure Expo dependencies are aligned with the SDK
-          npx expo install --fix
-
-      - name: Install global CLI tools (Optional - npx recommended)
-        script: |
-          # Using npx expo and npx eas is generally preferred over global installs
-          # npm install -g expo-cli@latest
-          npm install -g eas-cli@latest # Keep eas-cli if you use EAS features elsewhere
-
-      # REMOVED: Configure Expo project (babel.config.js, metro.config.js, app.json)
-      # >> Ensure these files are correct in your Git repository <<
-
-      - name: Run Expo Doctor
-        script: |
-          # Check project configuration health
-          npx expo-doctor || echo "Expo Doctor found issues, attempting build anyway."
-
-      - name: Set up Android SDK local properties
-        script: |
-          # Needed for Android builds to find the SDK
-          mkdir -p "$CM_BUILD_DIR/android"
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-
-      - name: Prebuild Android native project
+      - name: Install npm dependencies
         script: |
-          # Generate the native Android project from Expo config
-          export EAS_NO_VCS=1 # Prevent Git checks in CI
-          npx expo prebuild --platform android --clean
-
-      - name: Place google-services.json (If using Firebase)
+          npm install expo-cli@6.3.0
+          npm install
+      - name: Install sharp-cli globally
         script: |
-          # Decode and place Firebase config file
-          # Ensure GOOGLE_SERVICES_JSON is set as Base64 encoded secret in Codemagic
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            echo $GOOGLE_SERVICES_JSON | base64 --decode > $CM_BUILD_DIR/android/app/google-services.json
-            echo "google-services.json placed."
-          else
-            echo "Warning: GOOGLE_SERVICES_JSON not set. Firebase might not work."
+          npm install -g sharp-cli
+      - name: Install compatible expo-system-ui version
+        script: |
+          npm install expo-system-ui@3.0.0
+      - name: Clear Metro Bundler Cache
+        script: |
+          npx expo start --clear
+      - name: Validate Metro Configuration
+        script: |
+          if [ ! -f metro.config.js ]; then
+            echo "module.exports = require('@expo/metro-config').getDefaultConfig(__dirname);" > metro.config.js
           fi
-
-      - name: Setup keystore and signing properties
+      - name: Validate Expo project setup
         script: |
-          # Decode keystore from Codemagic secret
-          # Ensure CM_KEYSTORE, CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS, CM_KEY_PASSWORD are set
-          if [ -n "$CM_KEYSTORE" ]; then
-            echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/android/app/myapp-keystore.jks # Use a clear name
-
-            # Create keystore.properties used by app/build.gradle
-            echo "MYAPP_UPLOAD_STORE_FILE=myapp-keystore.jks" > $CM_BUILD_DIR/android/keystore.properties
-            echo "MYAPP_UPLOAD_STORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> $CM_BUILD_DIR/android/keystore.properties
-            echo "MYAPP_UPLOAD_KEY_ALIAS=$CM_KEY_ALIAS" >> $CM_BUILD_DIR/android/keystore.properties
-            echo "MYAPP_UPLOAD_KEY_PASSWORD=$CM_KEY_PASSWORD" >> $CM_BUILD_DIR/android/keystore.properties
-            echo "Keystore and properties configured."
-
-            # Append signing config application to app/build.gradle
-            # This assumes the keystore.properties defines the variables used below
-            cat >> $CM_BUILD_DIR/android/app/build.gradle << EOL
-
-            // Apply signing configuration properties
-            apply from: file('../keystore.properties')
-
-            android {
-                signingConfigs {
-                    release {
-                        if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE')) {
-                            storeFile file(MYAPP_UPLOAD_STORE_FILE)
-                            storePassword MYAPP_UPLOAD_STORE_PASSWORD
-                            keyAlias MYAPP_UPLOAD_KEY_ALIAS
-                            keyPassword MYAPP_UPLOAD_KEY_PASSWORD
-                        } else {
-                           println "Keystore properties not found for release signing."
-                        }
-                    }
-                }
-                buildTypes {
-                    release {
-                        signingConfig signingConfigs.release
-                        // Other release settings like minify, shrinkResources...
-                    }
-                }
-            }
-            EOL
-            echo "Signing configuration applied to app/build.gradle"
-          else
-            echo "Warning: CM_KEYSTORE not set. Release build will not be signed."
-          fi
-
-      # REMOVED: Configure Gradle (root build.gradle, gradle-wrapper.properties)
-      # >> Let expo prebuild handle these based on your Expo SDK version <<
-
-      - name: Configure Gradle JVM args and Packaging Options
+          npx expo doctor || true
+      - name: Run Expo Prebuild
         script: |
-          # Set Gradle JVM arguments (important for performance)
-          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m" >> $CM_BUILD_DIR/android/gradle.properties
-          echo "org.gradle.daemon=true" >> $CM_BUILD_DIR/android/gradle.properties
-          echo "org.gradle.parallel=true" >> $CM_BUILD_DIR/android/gradle.properties
-          echo "org.gradle.configureondemand=true" >> $CM_BUILD_DIR/android/gradle.properties
-
-          # Append common packaging options to avoid conflicts
-          cat >> $CM_BUILD_DIR/android/app/build.gradle << EOL
-
-          android {
-              packagingOptions {
-                  pickFirst '**/*.so' // Pick first native library found
-                  exclude 'META-INF/DEPENDENCIES'
-                  exclude 'META-INF/LICENSE'
-                  exclude 'META-INF/LICENSE.txt'
-                  exclude 'META-INF/license.txt'
-                  exclude 'META-INF/NOTICE'
-                  exclude 'META-INF/NOTICE.txt'
-                  exclude 'META-INF/notice.txt'
-                  exclude 'META-INF/ASL2.0'
-                  exclude('META-INF/*.kotlin_module')
-              }
-              // You might need specific configurations or resolution strategies here
-              // if you encounter specific dependency conflicts after prebuild
-              // configurations.all {
-              //     resolutionStrategy {
-              //         // Example: force 'androidx.core:core-ktx:1.9.0'
-              //     }
-              // }
-          }
-          EOL
-          echo "Gradle properties and packaging options configured."
-
-
-      - name: Build Android Release APK
+          npx expo prebuild
+      - name: Build Android release
         script: |
           cd android
-          # Ensure gradlew is executable
-          chmod +x ./gradlew
-          # Clean previous build outputs
-          ./gradlew clean
-          # Build the release APK, capture logs
-          echo "Starting Gradle build..."
-          ./gradlew assembleRelease --stacktrace > ../build.log 2>&1 || {
-            echo "Gradle build failed. Check build.log for details."
-            cat ../build.log
-            exit 1
-          }
-          echo "Gradle build finished."
-
-      - name: Verify APK existence
-        script: |
-          echo "Checking for generated APK..."
-          ls -la $CM_BUILD_DIR/android/app/build/outputs/apk/release/
-          if [ -f "$CM_BUILD_DIR/android/app/build/outputs/apk/release/app-release.apk" ]; then
-            echo "APK generated successfully: app-release.apk"
-          else
-            echo "Error: Release APK not found!"
-            # Optional: Check if an AAB was generated instead if that's the target
-            # ls -la $CM_BUILD_DIR/android/app/build/outputs/bundle/release/
-            exit 1
-          fi
-
+          ./gradlew assembleRelease
     artifacts:
-      - android/app/build/outputs/**/**/*.apk # Capture any APKs generated
-      - android/app/build/outputs/**/**/*.aab # Capture AAB if generated
-      - android/app/build/outputs/mapping/release/mapping.txt # Proguard mapping
-      - build.log # Capture the Gradle build log
-
+      - android/app/build/outputs/**/*.apk
     publishing:
       email:
         recipients:
-          - ankit.kapilvastu@gmail.com
+          - user_1@example.com
+          - user_2@example.com
         notify:
           success: true
-          failure: true # Important for debugging
+          failure: false
