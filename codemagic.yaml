@@ -14,6 +14,13 @@ workflows:
       - name: Install sharp-cli globally
         script: |
           npm install -g sharp-cli
+      - name: Install Expo CLI and eject
+        script: | 
+          npm install -g expo-cli
+          expo eject
+      - name: Set up app/build.gradle
+        script: | 
+          mv ./build.gradle android/app
       - name: Install compatible expo-system-ui version
         script: |
           npm install expo-system-ui@3.0.0
