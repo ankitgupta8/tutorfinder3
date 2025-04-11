@@ -31,7 +31,7 @@ workflows:
           fi
       - name: Validate Expo project setup
         script: |
-          npx expo doctor || true
+          npx expo doctor
       - name: Patch Expo Gradle Files
         script: |
           # Fix for the ExpoModulesCorePlugin.gradle
